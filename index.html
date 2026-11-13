@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>PDV PRO — Licenças</title>
+    <style>
+      :root {
+        --bg: #f6f7f5;
+        --card: #ffffff;
+        --text: #15201b;
+        --muted: #5b6b63;
+        --line: #dfe5e1;
+        --brand: #0f6e4f;
+        --brand-dark: #0b5a40;
+        --warn: #a15c00;
+        --warn-bg: #fff4e0;
+        --danger: #b42318;
+        --danger-bg: #fdecea;
+        --ok-bg: #e6f5ee;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 15px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 20px;
+        background: var(--card);
+        border-bottom: 1px solid var(--line);
+      }
+      header h1 { font-size: 18px; margin: 0; }
+      main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 18px;
+      }
+      .card h2 { font-size: 16px; margin: 0 0 12px; }
+      label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+      input, textarea {
+        width: 100%;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font: inherit;
+        background: #fff;
+      }
+      textarea { resize: vertical; min-height: 38px; }
+      .grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+      .grid .wide { grid-column: 1 / -1; }
+      @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+      button {
+        font: inherit;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+      button.primary:hover { background: var(--brand-dark); }
+      button.danger { color: var(--danger); }
+      button:disabled { opacity: 0.6; cursor: default; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .error { color: var(--danger); margin: 8px 0 0; }
+      .key {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 12px;
+        word-break: break-all;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        margin: 8px 0;
+      }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+      td.mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: nowrap; }
+      .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+      .badge.active { background: var(--ok-bg); color: var(--brand-dark); }
+      .badge.paused { background: var(--warn-bg); color: var(--warn); }
+      .badge.revoked { background: var(--danger-bg); color: var(--danger); }
+      .hidden { display: none !important; }
+      .login { max-width: 380px; margin: 60px auto; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PDV PRO — Licenças</h1>
+      <div class="row">
+        <span id="who" class="muted"></span>
+        <button id="logout" class="hidden">Sair</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="login-view" class="card login hidden">
+        <h2>Entrar no painel</h2>
+        <form id="login-form">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" autocomplete="username" required />
+          <div style="height: 10px"></div>
+          <label for="password">Senha</label>
+          <input id="password" type="password" autocomplete="current-password" required minlength="8" />
+          <div style="height: 14px"></div>
+          <div class="row">
+            <button class="primary" type="submit">Entrar</button>
+            <button type="button" id="signup">Criar meu acesso</button>
+          </div>
+          <p id="login-error" class="error hidden"></p>
+          <p class="muted">
+            "Criar meu acesso" é só para o primeiro uso. Depois de criar, o acesso precisa ser liberado como administrador.
+          </p>
+        </form>
+      </section>
+
+      <section id="denied-view" class="card hidden">
+        <h2>Acesso ainda não liberado</h2>
+        <p>Este usuário entrou, mas ainda não é administrador do painel.</p>
+        <p class="muted">Código do usuário (para liberar): <span id="user-id" class="mono"></span></p>
+      </section>
+
+      <div id="app-view" class="hidden">
+        <section class="card">
+          <h2>Nova licença (uma venda)</h2>
+          <form id="issue-form" class="grid">
+            <div>
+              <label for="licensee">Nome da loja / cliente</label>
+              <input id="licensee" maxlength="80" required placeholder="Mercadinho do Zé" />
+            </div>
+            <div>
+              <label for="machine">Código do computador</label>
+              <input id="machine" required placeholder="7K4M-Q9RT-2XWD-H8NP" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="wide">
+              <label for="notes">Observação (opcional)</label>
+              <textarea id="notes" maxlength="500" placeholder="Pedido do Mercado Livre nº…"></textarea>
+            </div>
+            <div class="wide row">
+              <button class="primary" type="submit" id="issue-button">Gerar chave</button>
+              <span class="muted">O cliente vê o código do computador na primeira tela do programa.</span>
+            </div>
+          </form>
+          <p id="issue-error" class="error hidden"></p>
+          <div id="issued" class="hidden">
+            <p><strong id="issued-title"></strong></p>
+            <div id="issued-key" class="key"></div>
+            <button id="copy-issued" class="primary">Copiar a chave</button>
+            <span class="muted">Envie a chave inteira ao cliente, numa mensagem só.</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+            <h2 style="margin: 0">Licenças</h2>
+            <div class="row">
+              <input id="search" placeholder="Buscar por nome, número ou código" style="width: 280px" />
+              <button id="reload">Atualizar</button>
+            </div>
+          </div>
+          <p id="list-error" class="error hidden"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Venda</th>
+                  <th>Cliente</th>
+                  <th>Computador</th>
+                  <th>Situação</th>
+                  <th>Emitida</th>
+                  <th>Última conferência</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <p id="empty" class="muted hidden">Nenhuma licença ainda.</p>
+          <p class="muted">
+            Pausar ou cancelar bloqueia o programa do cliente na próxima vez que ele abrir ou entrar com internet. Os dados
+            dele nunca são apagados. Reativar libera de novo: o cliente toca em "Conferir de novo".
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+    <script>
+      // A chave abaixo é a chave PÚBLICA de acesso do projeto (anon): não dá acesso a nada sozinha. Quem protege as
+      // licenças são o login e as regras do banco (só administradores leem e mudam), e a assinatura fica no servidor.
+      const SUPABASE_URL = 'https://nwnnawmmoflwlvkiqgae.supabase.co';
+      const SUPABASE_ANON_KEY =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53bm5hd21tb2Zsd2x2a2lxZ2FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1Nzc1MDEsImV4cCI6MjExMDE1MzUwMX0.sydrsgtD7PxgF8cGjZ_ouhetuBMA7C-KevvpL0R8ViI';
+      const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const STATUS_TEXT = { active: 'Ativa', paused: 'Pausada', revoked: 'Cancelada' };
+      const $ = (id) => document.getElementById(id);
+      let licenses = [];
+
+      function show(id, visible) {
+        $(id).classList.toggle('hidden', !visible);
+      }
+      function showError(id, message) {
+        $(id).textContent = message || '';
+        show(id, Boolean(message));
+      }
+      function formatDate(value) {
+        if (!value) return '—';
+        const date = new Date(value.length === 10 ? value + 'T12:00:00' : value);
+        return value.length === 10
+          ? date.toLocaleDateString('pt-BR')
+          : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      }
+      async function copy(text, button) {
+        await navigator.clipboard.writeText(text);
+        const old = button.textContent;
+        button.textContent = 'Copiado!';
+        setTimeout(() => (button.textContent = old), 1500);
+      }
+      function cell(row, text, className) {
+        const td = document.createElement('td');
+        if (className) td.className = className;
+        td.textContent = text;
+        row.appendChild(td);
+        return td;
+      }
+
+      async function render() {
+        const { data } = await db.auth.getSession();
+        const session = data.session;
+        show('logout', Boolean(session));
+        $('who').textContent = session ? session.user.email : '';
+        if (!session) {
+          show('login-view', true);
+          show('denied-view', false);
+          show('app-view', false);
+          return;
+        }
+        show('login-view', false);
+        const { data: isAdmin } = await db.rpc('is_admin');
+        if (!isAdmin) {
+          $('user-id').textContent = session.user.id;
+          show('denied-view', true);
+          show('app-view', false);
+          return;
+        }
+        show('denied-view', false);
+        show('app-view', true);
+        await loadLicenses();
+      }
+
+      async function loadLicenses() {
+        showError('list-error', '');
+        const { data, error } = await db
+          .from('licenses')
+          .select('id, licensee, machine, status, issued_at, last_checked_at, notes, license_key')
+          .order('id', { ascending: false });
+        if (error) return showError('list-error', 'Não foi possível carregar as licenças: ' + error.message);
+        licenses = data;
+        drawRows();
+      }
+
+      function drawRows() {
+        const term = $('search').value.trim().toLowerCase();
+        const rows = $('rows');
+        rows.replaceChildren();
+        const visible = licenses.filter(
+          (l) =>
+            !term ||
+            l.id.toLowerCase().includes(term) ||
+            l.licensee.toLowerCase().includes(term) ||
+            l.machine.toLowerCase().includes(term),
+        );
+        show('empty', licenses.length === 0);
+        for (const license of visible) {
+          const tr = document.createElement('tr');
+          cell(tr, license.id, 'mono');
+          const who = cell(tr, license.licensee);
+          if (license.notes) {
+            const note = document.createElement('div');
+            note.className = 'muted';
+            note.textContent = license.notes;
+            who.appendChild(note);
+          }
+          cell(tr, license.machine, 'mono');
+          const statusCell = cell(tr, '');
+          const badge = document.createElement('span');
+          badge.className = 'badge ' + license.status;
+          badge.textContent = STATUS_TEXT[license.status] || license.status;
+          statusCell.appendChild(badge);
+          cell(tr, formatDate(license.issued_at));
+          cell(tr, formatDate(license.last_checked_at));
+          const actions = cell(tr, '');
+          const box = document.createElement('div');
+          box.className = 'row';
+          const addButton = (text, onClick, className) => {
+            const button = document.createElement('button');
+            button.textContent = text;
+            if (className) button.className = className;
+            button.addEventListener('click', () => onClick(button));
+            box.appendChild(button);
+          };
+          addButton('Copiar chave', (button) => copy(license.license_key, button));
+          if (license.status !== 'active') addButton('Reativar', () => setStatus(license, 'active'));
+          if (license.status === 'active') addButton('Pausar', () => setStatus(license, 'paused'));
+          if (license.status !== 'revoked') addButton('Cancelar', () => setStatus(license, 'revoked'), 'danger');
+          actions.appendChild(box);
+          rows.appendChild(tr);
+        }
+      }
+
+      async function setStatus(license, status) {
+        const question = {
+          active: `Reativar a licença ${license.id} (${license.licensee})?`,
+          paused: `Pausar a licença ${license.id} (${license.licensee})? O programa dele bloqueia na próxima conferência.`,
+          revoked: `CANCELAR a licença ${license.id} (${license.licensee})? O programa dele bloqueia na próxima conferência.`,
+        }[status];
+        if (!confirm(question)) return;
+        const { error } = await db.from('licenses').update({ status }).eq('id', license.id);
+        if (error) return showError('list-error', 'Não foi possível mudar a situação: ' + error.message);
+        await loadLicenses();
+      }
+
+      $('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        showError('login-error', '');
+        const { error } = await db.auth.signInWithPassword({
+          email: $('email').value.trim(),
+          password: $('password').value,
+        });
+        if (error) return showError('login-error', 'E-mail ou senha incorretos (ou e-mail ainda não confirmado).');
+        await render();
+      });
+
+      $('signup').addEventListener('click', async () => {
+        showError('login-error', '');
+        const email = $('email').value.trim();
+        const password = $('password').value;
+        if (!email || password.length < 8) {
+          return showError('login-error', 'Preencha o e-mail e uma senha com pelo menos 8 caracteres.');
+        }
+        const { error } = await db.auth.signUp({ email, password });
+        if (error) return showError('login-error', 'Não foi possível criar o acesso: ' + error.message);
+        showError('login-error', 'Acesso criado. Se chegar um e-mail de confirmação, confirme e depois entre aqui.');
+        await render();
+      });
+
+      $('logout').addEventListener('click', async () => {
+        await db.auth.signOut();
+        await render();
+      });
+
+      $('issue-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        showError('issue-error', '');
+        show('issued', false);
+        $('issue-button').disabled = true;
+        try {
+          const { data, error } = await db.functions.invoke('issue-license', {
+            body: {
+              licensee: $('licensee').value,
+              machine: $('machine').value,
+              notes: $('notes').value,
+            },
+          });
+          if (error) {
+            let message = 'Não foi possível gerar a chave.';
+            try {
+              message = (await error.context.json()).error || message;
+            } catch {}
+            return showError('issue-error', message);
+          }
+          $('issued-title').textContent = `Licença ${data.id} para ${data.licensee} (computador ${data.machine})`;
+          $('issued-key').textContent = data.key;
+          show('issued', true);
+          $('issue-form').reset();
+          await loadLicenses();
+        } finally {
+          $('issue-button').disabled = false;
+        }
+      });
+
+      $('copy-issued').addEventListener('click', (event) => copy($('issued-key').textContent, event.target));
+      $('search').addEventListener('input', drawRows);
+      $('reload').addEventListener('click', loadLicenses);
+      db.auth.onAuthStateChange(() => {
+        setTimeout(render, 0);
+      });
+      render();
+    </script>
+  </body>
+</html>
