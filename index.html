@@ -136,6 +136,44 @@
 
       <div id="app-view" class="hidden">
         <section class="card">
+          <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+            <h2 style="margin: 0">Vendas do Mercado Livre</h2>
+            <div class="row">
+              <span id="ml-status" class="muted"></span>
+              <button id="ml-connect">Conectar conta</button>
+              <button id="ml-reload">Atualizar</button>
+            </div>
+          </div>
+          <p id="ml-banner" class="hidden"></p>
+          <p id="ml-error" class="error hidden"></p>
+          <form id="ml-sync-form" class="row" style="margin-bottom: 10px">
+            <input id="ml-order" placeholder="Número da venda (para buscar uma venda à mão)" style="width: 320px" />
+            <button type="submit" id="ml-sync-button">Buscar venda</button>
+            <span id="ml-sync-result" class="muted"></span>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Venda</th>
+                  <th>Comprador</th>
+                  <th>Código da compra</th>
+                  <th>Computadores</th>
+                  <th>Mensagem</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="ml-rows"></tbody>
+            </table>
+          </div>
+          <p id="ml-empty" class="muted hidden">Nenhuma venda ainda.</p>
+          <p class="muted">
+            Cada venda paga do PDV PRO gera um código da compra e o painel manda, sozinho, a mensagem com o link e o código
+            no chat da venda. O cliente digita o código na primeira tela do programa e ele ativa pela internet. Se a
+            mensagem não sair, use "Copiar mensagem" e mande pelo chat. Venda cancelada cancela o código e as licenças.
+          </p>
+        </section>
+        <section class="card">
           <h2>Nova licença (uma venda)</h2>
           <form id="issue-form" class="grid">
             <div>
@@ -260,7 +298,8 @@
         }
         show('denied-view', false);
         show('app-view', true);
-        await loadLicenses();
+        showMlBanner();
+        await Promise.all([loadLicenses(), loadMl()]);
       }
 
       async function loadLicenses() {
@@ -334,6 +373,143 @@
         if (error) return showError('list-error', 'Não foi possível mudar a situação: ' + error.message);
         await loadLicenses();
       }
+
+
+      // ---------- Mercado Livre ----------
+      const ML_DOWNLOAD_URL = 'https://github.com/baldicera-stack/pdv-pro-atualizacoes/releases/latest';
+      /** A mesma mensagem que a função ml-webhook manda no chat (supabase/functions/ml-webhook/index.ts). */
+      function deliveryMessage(code, quantity) {
+        const many = quantity > 1 ? ` Ele vale para ${quantity} computadores.` : '';
+        return (
+          'Olá! Obrigado pela compra do PDV PRO.\n' +
+          `1) Baixe o instalador: ${ML_DOWNLOAD_URL}\n` +
+          `2) Instale e, na primeira tela, digite o código da compra: ${code}${many}\n` +
+          'Na ativação o computador precisa de internet. Qualquer dúvida, responda aqui.'
+        );
+      }
+
+      async function functionError(error, fallback) {
+        try {
+          return (await error.context.json()).error || fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      async function loadMl() {
+        showError('ml-error', '');
+        const { data: status, error: statusError } = await db.functions.invoke('ml-auth', {
+          body: { action: 'status' },
+        });
+        if (statusError) {
+          $('ml-status').textContent = '';
+        } else if (status.connected) {
+          $('ml-status').textContent = `Conta conectada: ${status.nickname || status.userId}`;
+          $('ml-connect').textContent = 'Reconectar';
+        } else {
+          $('ml-status').textContent = status.ready
+            ? 'Conta ainda não conectada.'
+            : 'Falta criar o aplicativo no Mercado Livre (segredos ML_CLIENT_ID e ML_CLIENT_SECRET).';
+          $('ml-connect').textContent = 'Conectar conta';
+        }
+        const { data, error } = await db
+          .from('activation_codes')
+          .select('*, licenses(id, status, machine)')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (error) return showError('ml-error', 'Não foi possível carregar as vendas: ' + error.message);
+        const rows = $('ml-rows');
+        rows.replaceChildren();
+        show('ml-empty', data.length === 0);
+        for (const sale of data) {
+          const tr = document.createElement('tr');
+          const order = cell(tr, sale.ml_order_id ? String(sale.ml_order_id) : '—', 'mono');
+          const when = document.createElement('div');
+          when.className = 'muted';
+          when.textContent = formatDate(sale.created_at);
+          order.appendChild(when);
+          const who = cell(tr, sale.licensee);
+          if (sale.ml_buyer_nickname) {
+            const nick = document.createElement('div');
+            nick.className = 'muted';
+            nick.textContent = sale.ml_buyer_nickname;
+            who.appendChild(nick);
+          }
+          const codeCell = cell(tr, sale.code, 'mono');
+          if (sale.status !== 'active') {
+            const badge = document.createElement('span');
+            badge.className = 'badge revoked';
+            badge.textContent = 'Cancelado';
+            codeCell.appendChild(document.createElement('br'));
+            codeCell.appendChild(badge);
+          }
+          const used = sale.licenses || [];
+          cell(
+            tr,
+            `${used.length} de ${sale.quantity}` + (used.length ? ` (${used.map((l) => l.id).join(', ')})` : ''),
+          );
+          const message = cell(tr, '');
+          if (sale.message_sent_at) {
+            message.textContent = 'Enviada em ' + formatDate(sale.message_sent_at);
+          } else if (sale.message_error) {
+            message.className = 'error';
+            message.textContent = 'Não saiu: ' + sale.message_error;
+          } else {
+            message.textContent = '—';
+          }
+          const actions = cell(tr, '');
+          const box = document.createElement('div');
+          box.className = 'row';
+          const addButton = (text, onClick) => {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.addEventListener('click', () => onClick(button));
+            box.appendChild(button);
+          };
+          addButton('Copiar mensagem', (button) => copy(deliveryMessage(sale.code, sale.quantity), button));
+          addButton('Copiar código', (button) => copy(sale.code, button));
+          actions.appendChild(box);
+          rows.appendChild(tr);
+        }
+      }
+
+      function showMlBanner() {
+        const params = new URLSearchParams(location.search);
+        const result = params.get('ml');
+        if (!result) return;
+        const banner = $('ml-banner');
+        banner.className = result === 'ok' ? '' : 'error';
+        banner.textContent =
+          result === 'ok'
+            ? `Conta do Mercado Livre conectada (${params.get('conta') || ''}). As próximas vendas pagas recebem a mensagem sozinhas.`
+            : 'Não foi possível conectar: ' + (params.get('motivo') || 'tente de novo.');
+        history.replaceState(null, '', location.pathname);
+      }
+
+      $('ml-connect').addEventListener('click', async () => {
+        showError('ml-error', '');
+        const { data, error } = await db.functions.invoke('ml-auth', { body: { action: 'connect' } });
+        if (error) return showError('ml-error', await functionError(error, 'Não foi possível iniciar a conexão.'));
+        location.href = data.url;
+      });
+      $('ml-reload').addEventListener('click', loadMl);
+      $('ml-sync-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const orderId = $('ml-order').value.trim();
+        if (!orderId) return;
+        $('ml-sync-button').disabled = true;
+        $('ml-sync-result').textContent = 'Buscando…';
+        try {
+          const { data, error } = await db.functions.invoke('ml-webhook', { body: { action: 'sync', orderId } });
+          $('ml-sync-result').textContent = error
+            ? await functionError(error, 'Não foi possível buscar a venda.')
+            : data.result;
+          await loadMl();
+          await loadLicenses();
+        } finally {
+          $('ml-sync-button').disabled = false;
+        }
+      });
 
       $('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();
